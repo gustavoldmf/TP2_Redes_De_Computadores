@@ -21,7 +21,10 @@ struct Sensor_message {
 
 //variaveis globais do servidor
 Sensor_message all_sensors[MAX_SENSOR];
+Sensor_message all_sensors_aux[MAX_SENSOR];
 int s_index = 0;
+int count  = 0;
+int flag_ja_atual = 0;
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 
@@ -31,59 +34,83 @@ void usage(int argc, char **argv) {
     exit(EXIT_FAILURE);
 }
 
-// tem a função de redirecionar as atualizações para
-// cada sensor do mesmo tipo 
+//Função que verifica se ocorreu alguma atualização de algum outro cliente. 
+int Check_Atualization(void){
+    for (int i = 0; i < MAX_SENSOR; i++)
+    {
+        if(all_sensors[i].measurement != all_sensors_aux[i].measurement){ //se sim, significa que ocoreu atualização
+            return i; // retorna qual dos clientes atualizou, assim eu consigo puxar seu tipo.
+        }
+    }
+    return 0;
+}
+
+// void * teste(void * p_client_socket){
+
+//     char teste_buf[BUFSZ];
+//     int teste_client_socket = *((int*)p_client_socket);
+//     int teste_number_client = teste_client_socket - 4;
+//     free(p_client_socket);
+//     Sensor_message teste_dados;
+
+//     while(1){
+//         re
+//     }
+
+// }
+
+// Faz a logica de troca de dados com o cliente 
 void * gerencia_sensores(void * p_cliente_socket){
 
     char buf[BUFSZ];
     int client_socket = *((int*)p_cliente_socket);
+    int number_client = client_socket - 4;
+    printf("\n\nESTE É O SENSOR: %d", number_client);
     free(p_cliente_socket);
     Sensor_message dados;
+    int check;
 
+    //supondo que ele passe aqui apenas uma vez
+
+    while(count < 100){
+    count++;
+
+    check = Check_Atualization();
+    if( check != 0 && flag_ja_atual){ // se existe atulização ent:
+        flag_ja_atual = 0; 
+        if (strcmp(all_sensors[check].type , all_sensors[number_client].type) == 0) // se o cliente que está conversando é do mesmo tipo que o cliente que atualizou, o servidor usa um send para enviar a atualização para recalibragem.
+        {
+            printf("\nESPERANDO PARA ENVIAR para Sensor %d\n", number_client);
+            send(client_socket, &all_sensors[check], sizeof(all_sensors[check]), 0);
+            printf("\nENVIADO para Sensor %d\n", number_client);
+        } 
+    }
+    else{
+    
+    printf("\nESPERANDO RECEBER do Sensor %d\n", number_client);
     if(recv(client_socket, &dados, sizeof(dados)+1,0) == -1){
-			logexit("Erro ao monitorar atualizacões");
-	}
-    int n_cliente = client_socket - 4;
-
-    // printf("Este é o cliente numero %d",n_cliente);
+			logexit("Monitoramento de atualizacoes");
+	} 
+     printf("RECEBIDO do Sensor %d", number_client);
 
     pthread_mutex_lock(&mutex); // apenas esta thread podera alterar neste momento
-    if(s_index < MAX_SENSOR){
-        all_sensors[s_index] = dados;
-        s_index++;
-    }
-    pthread_mutex_unlock(&mutex); // libera para que outra thread possa fazer alterações
+    all_sensors_aux [number_client] = all_sensors[number_client]; // copia o antigo valor daquele sensor na struct auxiliar
+    all_sensors[number_client] = dados;
+    flag_ja_atual = 1;
+    pthread_mutex_unlock(&mutex); // libera para que outra thread possa fazer alterações 
 
+    printf("\n////////////////// ATUALIZACAO SENSOR %d ///////////////////////\n", number_client);
     for(int i = 0; i < MAX_SENSOR ; i++){
         printf("\nSensor numero %d\n", i);
         printf("%s\n", all_sensors[i].type);
         printf("coodenadas: <%d,%d>\n", all_sensors[i].coords[0], all_sensors[i].coords[1]);
         printf("valor: %f\n\n", all_sensors[i].measurement);
     }    
+    }
 
-    while(1){
 
-        if(recv(client_socket, &dados, sizeof(dados),0) == -1){
-            logexit("atualização temporaria");
-        }
-        else{
+    }
 
-            printf("RECEBIDO");
-
-            pthread_mutex_lock(&mutex); // apenas esta thread podera alterar neste momento
-
-            all_sensors[client_socket-4] = dados;
-            pthread_mutex_unlock(&mutex); // libera para que outra thread possa fazer alterações
-
-            for(int i = 0; i < MAX_SENSOR; i++){
-                if(strcmp(all_sensors[i].type, "temperature")){
-                    send(client_socket+i+4, &dados, sizeof(dados), 0);
-                }
-            }
-            // Como enviar esses dados para os outros clientes????????
-
-            }
-        }
 
     return NULL;
 }
@@ -141,12 +168,14 @@ int main(int argc, char **argv) {
                 logexit("accept");
             }
 
-            printf("\nCliente aceito com csock = %d\n\n", csock);
-            pthread_t t; 
+            printf("\nSensor aceito com csock = %d\n\n", csock - 4);
+            pthread_t function1;
+
 
             int *pclient = malloc(sizeof(int));
             *pclient = csock;
-            pthread_create(&t, NULL, gerencia_sensores, pclient);
+            pthread_create(&function1, NULL, gerencia_sensores, pclient);
+
 
         }
 
