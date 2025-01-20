@@ -11,7 +11,7 @@
 
 #define SERVER_BACKLOG 100
 #define BUFSZ 1024
-#define MAX_SENSOR 12 - 9
+#define MAX_SENSOR 3
 
 struct Sensor_message {
     char type[20];
@@ -45,53 +45,37 @@ int Check_Atualization(void){
     return 0;
 }
 
-// void * teste(void * p_client_socket){
-
-//     char teste_buf[BUFSZ];
-//     int teste_client_socket = *((int*)p_client_socket);
-//     int teste_number_client = teste_client_socket - 4;
-//     free(p_client_socket);
-//     Sensor_message teste_dados;
-
-//     while(1){
-//         re
-//     }
-
-// }
-
 // Faz a logica de troca de dados com o cliente 
 void * gerencia_sensores(void * p_cliente_socket){
 
     char buf[BUFSZ];
     int client_socket = *((int*)p_cliente_socket);
     int number_client = client_socket - 4;
-    printf("\n\nESTE É O SENSOR: %d", number_client);
     free(p_cliente_socket);
     Sensor_message dados;
     int check;
+    int disconnect;
 
-    //supondo que ele passe aqui apenas uma vez
-
-    while(count < 100){
-    count++;
+    while(1){
 
     check = Check_Atualization();
-    if( check != 0 && flag_ja_atual){ // se existe atulização ent:
+    
+    if( check >= 0 && flag_ja_atual){ // se existe atulização ent:
         flag_ja_atual = 0; 
         if (strcmp(all_sensors[check].type , all_sensors[number_client].type) == 0) // se o cliente que está conversando é do mesmo tipo que o cliente que atualizou, o servidor usa um send para enviar a atualização para recalibragem.
         {
-            printf("\nESPERANDO PARA ENVIAR para Sensor %d\n", number_client);
             send(client_socket, &all_sensors[check], sizeof(all_sensors[check]), 0);
-            printf("\nENVIADO para Sensor %d\n", number_client);
         } 
     }
     else{
     
-    printf("\nESPERANDO RECEBER do Sensor %d\n", number_client);
-    if(recv(client_socket, &dados, sizeof(dados)+1,0) == -1){
-			logexit("Monitoramento de atualizacoes");
-	} 
-     printf("RECEBIDO do Sensor %d", number_client);
+    // printf("\nESPERANDO RECEBER do Sensor %d\n", number_client);
+    disconnect = recv(client_socket, &dados, sizeof(dados),0);
+
+    if(disconnect <= 0){
+        printf("\nCliente desconectado\n");
+        pthread_exit(NULL);
+    }
 
     pthread_mutex_lock(&mutex); // apenas esta thread podera alterar neste momento
     all_sensors_aux [number_client] = all_sensors[number_client]; // copia o antigo valor daquele sensor na struct auxiliar
@@ -99,13 +83,12 @@ void * gerencia_sensores(void * p_cliente_socket){
     flag_ja_atual = 1;
     pthread_mutex_unlock(&mutex); // libera para que outra thread possa fazer alterações 
 
-    printf("\n////////////////// ATUALIZACAO SENSOR %d ///////////////////////\n", number_client);
-    for(int i = 0; i < MAX_SENSOR ; i++){
-        printf("\nSensor numero %d\n", i);
-        printf("%s\n", all_sensors[i].type);
-        printf("coodenadas: <%d,%d>\n", all_sensors[i].coords[0], all_sensors[i].coords[1]);
-        printf("valor: %f\n\n", all_sensors[i].measurement);
-    }    
+//Imprime as mensagens recebidas pelos sensores
+        printf("\nlog:\n");
+        printf("<type> sensor in (<%d>,<%d>)\n", dados.coords[0], dados.coords[1]);
+        printf("measurement: <%.4f>\n",dados.measurement);
+        printf("\n");
+ 
     }
 
 
@@ -151,7 +134,7 @@ int main(int argc, char **argv) {
 
     char addrstr[BUFSZ];
     addrtostr(addr, addrstr, BUFSZ);
-    printf("bound to %s, waiting connections\n", addrstr);
+    // printf("bound to %s, waiting connections\n", addrstr);
 
         struct sockaddr_storage cstorage;
         struct sockaddr *caddr = (struct sockaddr *)(&cstorage);
@@ -168,13 +151,16 @@ int main(int argc, char **argv) {
                 logexit("accept");
             }
 
-            printf("\nSensor aceito com csock = %d\n\n", csock - 4);
             pthread_t function1;
+            pthread_t function2;
 
 
-            int *pclient = malloc(sizeof(int));
-            *pclient = csock;
-            pthread_create(&function1, NULL, gerencia_sensores, pclient);
+            int *pclient_f1 = malloc(sizeof(int));
+            // int *pclient_f2 = malloc(sizeof(int));
+            *pclient_f1 = csock;
+            // *pclient_f2 = csock;
+            pthread_create(&function1, NULL, gerencia_sensores, pclient_f1);
+            // phtread_create(&function2, NULL, Envia_Atualizacao, pclient_f2)
 
 
         }

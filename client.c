@@ -72,26 +72,24 @@ void *monitora_atualizacao_externa(void *p_client_socket) {
     while (1) {
 
         // Chama recv_all para garantir que todos os dados sejam recebidos
+		// printf("\nvou receber\n");
         ssize_t result = recv_all(client_socket, &atualizacao_ext, sizeof(atualizacao_ext));
+		// printf("\noba!! chegou\n");
         if (result <= 0) {  // Erro ou conexão fechada
             logexit("Erro ao monitorar atualizações");
         } else {
+
             medicao_recal = atualiza_medicao(atualizacao_ext.measurement, atualizacao_ext.coords);
+			sensor.measurement = medicao_recal;
 
-            // Exibe as informações recebidas
-            printf("\nATUALIZAÇÃO RECEBIDA\n");
-            printf("\nInformações do sensor recebido:\n");
-            printf("%s\n", atualizacao_ext.type);
-            printf("coordenadas: <%d, %d>\n", atualizacao_ext.coords[0], atualizacao_ext.coords[1]);
-            printf("valor: %f\n\n", atualizacao_ext.measurement);
 
-            // Atualiza a medição no sensor
-            sensor.measurement = medicao_recal;
-            printf("\n\nNOVA MEDIDA DESTE SENSOR:\n");
-            printf("\nSensor:\n");
-            printf("%s\n", sensor.type);
-            printf("coordenadas: <%d, %d>\n", sensor.coords[0], sensor.coords[1]);
-            printf("valor: %f\n\n", sensor.measurement);
+//Imprime as mensagens 
+        printf("\nlog:\n");
+        printf("<type> sensor in (<%d>,<%d>)\n", atualizacao_ext.coords[0], atualizacao_ext.coords[1]);
+        printf("measurement: <%.4f>\n",atualizacao_ext.measurement);
+        printf("action: <%s>", "ainda veremos");
+		printf("\n");
+
         }
     }
 
@@ -102,12 +100,41 @@ void *monitora_atualizacao_externa(void *p_client_socket) {
 #define BUFSZ 1024
 
 int main(int argc, char **argv) {
+
+	//Checagem de erros nos argumentos de entrada
 	if (argc < 8) {
+		printf("\nError: Invalid number of arguments\n");
 		usage(argc, argv);
 	}
 
-	srand(time(NULL));
-	int random = 20 + rand() % ( 40 - 20 + 1); // atribui um numero aleatório entre 20 e 40 para o sensor de temperatura
+	if(strcmp(argv[3], "-type") != 0){
+		printf("\nError: Expected '-type' argument\n");
+		usage(argc, argv);
+	}
+
+	if(strcmp(argv[5], "-coords") != 0){
+		printf("\nError: Expected '-coords' argument\n");
+		usage(argc, argv);
+	}
+
+	if(atoi(argv[6]) > 9 || atoi(argv[6]) < 0 || atoi(argv[7]) > 9 || atoi(argv[7]) < 0){
+		printf("\nError: Coordinates must be in the range 0-9\n");
+		usage(argc, argv);
+	}
+
+	int t, q, h;
+	t = strcmp(argv[4], "temperature");
+	q = strcmp(argv[4], "humidity");
+	h = strcmp(argv[4], "air_quality");
+
+	if(t != 0 && q != 0 && h != 0){
+		printf("\nError: Invalid sensor type\n");
+		usage(argc, argv);
+	}
+
+// atribui um numero aleatório entre 20 e 40 para o sensor de temperatura
+	srand(time(NULL)); 
+	int random = 20 + rand() % ( 40 - 20 + 1); 
 
 ////// PREENCHE INFORMAÇÕES DO SENSOR ////////
 	strncpy(sensor.type, argv[4], sizeof(sensor.type) -1);
@@ -115,15 +142,6 @@ int main(int argc, char **argv) {
 	sensor.coords[1] = atoi(argv[7]);
 	sensor.measurement = random;
 //////////////////////////////////////////////
-
-///// IMPRIME OS DADOS DO SENSOR PARA CONFERIR /////
-
-		printf("\nVALORES INICIAIS DESTE SENSOR:\n");
-		printf("\nSensor");
-		printf("%s\n", sensor.type);
-		printf("coodenadas: <%d,%d>\n", sensor.coords[0], sensor.coords[1]);
-		printf("valor: %f\n\n", sensor.measurement);
-///////////////////////////////////////////////
 
 	struct sockaddr_storage storage;
 	if (0 != addrparse(argv[1], argv[2], &storage)) {
@@ -144,7 +162,7 @@ int main(int argc, char **argv) {
     char buf[BUFSZ];
 	addrtostr(addr, addrstr, BUFSZ);
 
-	printf("Conexão de sucesso com o servidor %s\n", addrstr);
+	// printf("Conexão de sucesso com o servidor %s\n", addrstr);
 
     size_t count = send(s, &sensor, sizeof(sensor),0);
 
@@ -164,15 +182,15 @@ int main(int argc, char **argv) {
 		sleep(2);
 
 		if(strcmp(sensor.type, "temperature") == 0){
-		printf("REFRESH ENVIADO temperatura");
+		// printf("\nREFRESH ENVIADO temperatura");
 		sleep(5);
 		}
 		else if(strcmp(sensor.type, "Humidade") == 0){
-		printf("REFRESH ENVIADO humidade");
+		// printf("\nREFRESH ENVIADO humidade");
 		sleep(7);
 		}
 		else if(strcmp(sensor.type, "Qualidade do Ar") == 0){
-		printf("REFRESH ENVIADO qualidade");
+		// printf("\nREFRESH ENVIADO qualidade");
 		sleep(10);
 		
 		}
